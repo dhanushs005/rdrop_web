@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>RDrop-Web: Free YouTube Video Downloader</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="RedDrop is a free and fast YouTube video downloader. Download in MP4 format with 1080p, 720p, and more."
+        />
+        <meta
+            name="keywords"
+            content="YouTube downloader, video downloader, MP4, RDrop, Genyt, vidmate"
+        />
+        <meta name="Dhanush S" content="RedDrop" />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap");
+            body {
+                font-family: "Poppins", sans-serif;
+                background-color: #121212;
+            }
+            .drop-shadow-custom {
+                filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04))
+                    drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1));
+            }
+            #progress-bar::-webkit-progress-bar {
+                background-color: #2d2d2d;
+                border-radius: 9999px;
+            }
+            #progress-bar::-webkit-progress-value {
+                background-color: #ef4444;
+                border-radius: 9999px;
+                transition: width 0.3s ease;
+            }
+            #progress-bar::-moz-progress-bar {
+                background-color: #ef4444;
+                border-radius: 9999px;
+                transition: width 0.3s ease;
+            }
+        </style>
+    </head>
+    <body
+        class="bg-[#121212] flex items-center justify-center min-h-screen p-4"
+    >
+        <div
+            class="w-full max-w-lg p-6 sm:p-8 bg-[#1E1E1E] rounded-2xl shadow-xl drop-shadow-custom"
+        >
+            <h1 class="text-3xl font-bold text-center text-[#E0E0E0] mb-6">
+                🎬 RedDrop YouTube Downloader
+            </h1>
+            <p class="text-center text-[#A0A0A0] mb-8">
+                The fastest way to download YouTube videos in high quality MP4
+                (up to 1080p).
+            </p>
+
+            <div class="space-y-4">
+                <div>
+                    <label
+                        for="url"
+                        class="block text-sm font-medium text-[#A0A0A0]"
+                        >Video URL</label
+                    >
+                    <input
+                        type="text"
+                        id="url"
+                        placeholder="Paste YouTube URL here..."
+                        required
+                        class="mt-1 block w-full px-4 py-2 bg-[#2D2D2D] border border-[#444] rounded-md text-[#E0E0E0] placeholder-[#707070] focus:ring-red-500 focus:border-red-500 transition-colors duration-200"
+                    />
+                </div>
+
+                <div>
+                    <label
+                        for="resolution"
+                        class="block text-sm font-medium text-[#A0A0A0]"
+                        >Resolution</label
+                    >
+                    <select
+                        id="resolution"
+                        class="mt-1 block w-full px-4 py-2 bg-[#2D2D2D] border border-[#444] rounded-md text-[#E0E0E0] focus:ring-red-500 focus:border-red-500 appearance-none pr-8 transition-colors duration-200"
+                    >
+                        <option value="best">Best Quality</option>
+                        <option value="1080">1080p (Full HD)</option>
+                        <option value="720">720p (HD)</option>
+                        <option value="480">480p</option>
+                        <option value="360">360p</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label
+                        for="filename"
+                        class="block text-sm font-medium text-[#A0A0A0]"
+                        >Custom Filename (Optional)</label
+                    >
+                    <input
+                        type="text"
+                        id="filename"
+                        placeholder="e.g. MyCoolVideo"
+                        class="mt-1 block w-full px-4 py-2 bg-[#2D2D2D] border border-[#444] rounded-md text-[#E0E0E0] placeholder-[#707070] focus:ring-red-500 focus:border-red-500 transition-colors duration-200"
+                    />
+                </div>
+            </div>
+
+            <button
+                onclick="download()"
+                class="w-full mt-6 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md shadow-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+            >
+                <span>🚀 Download Video</span>
+            </button>
+
+            <div id="status" class="text-center mt-4 text-[#A0A0A0]"></div>
+            <div class="flex items-center space-x-2 mt-4">
+                <progress
+                    id="progress-bar"
+                    max="100"
+                    value="0"
+                    class="w-full h-2 bg-[#2D2D2D] rounded-full overflow-hidden"
+                    style="display: none"
+                ></progress>
+                <span
+                    id="percent-text"
+                    class="text-sm text-[#E0E0E0]"
+                    style="display: none"
+                    >0%</span
+                >
+            </div>
+        </div>
+
+        <script>
+            async function download() {
+                const url = document.getElementById("url").value;
+                const resolution = document.getElementById("resolution").value;
+                const filename = document
+                    .getElementById("filename")
+                    .value.trim();
+                const progressBar = document.getElementById("progress-bar");
+                const percentText = document.getElementById("percent-text");
+                const status = document.getElementById("status");
+
+                if (!url) {
+                    status.innerText = "❌ Please enter a YouTube URL";
+                    status.style.color = "#F87171";
+                    return;
+                }
+
+                progressBar.style.display = "block";
+                percentText.style.display = "inline";
+                progressBar.value = 10;
+                percentText.innerText = "10%";
+                status.innerText = "⏳ Preparing download...";
+                status.style.color = "#E0E0E0";
+
+                try {
+                    const response = await fetch("/download", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url, resolution, filename }),
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.error || "Something went wrong");
+                    }
+
+                    progressBar.value = 50;
+                    percentText.innerText = "50%";
+                    status.innerText = "📥 Downloading video...";
+
+                    const blob = await response.blob();
+                    progressBar.value = 80;
+                    percentText.innerText = "80%";
+
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = downloadUrl;
+                    a.download = filename
+                        ? `${filename}.mp4`
+                        : "RedDrop_Video.mp4";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+
+                    progressBar.value = 100;
+                    percentText.innerText = "100%";
+                    status.innerText = "✅ Download complete!";
+                    status.style.color = "#4ADE80";
+
+                    setTimeout(() => {
+                        progressBar.style.display = "none";
+                        percentText.style.display = "none";
+                        progressBar.value = 0;
+                        percentText.innerText = "0%";
+                    }, 2000);
+                } catch (err) {
+                    progressBar.style.display = "none";
+                    percentText.style.display = "none";
+                    status.innerText = "❌ " + err.message;
+                    status.style.color = "#F87171";
+                }
+            }
+        </script>
+    </body>
+</html>
