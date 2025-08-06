@@ -17,9 +17,11 @@ def index():
 @app.route("/download", methods=["POST"])
 def download_video():
     try:
-        video_url = request.form.get("url")
-        resolution = request.form.get("resolution", "1080p") # Note: This may not be respected if a pre-merged file at this resolution isn't available.
-        custom_filename = request.form.get("filename", "").strip()
+        # Correctly get data from the JSON body of the request
+        data = request.get_json()
+        video_url = data.get("url")
+        resolution = data.get("resolution", "best") # Changed default to 'best' to match frontend
+        custom_filename = data.get("filename", "").strip()
 
         if not video_url:
             return jsonify({"error": "No video URL provided."}), 400
@@ -27,35 +29,38 @@ def download_video():
         # Sanitize filename
         if not custom_filename:
             # Use a more descriptive default filename if possible, otherwise fallback to UUID
-            custom_filename = f"video_{uuid.uuid4().hex[:8]}"
-
-        # Add .mp4 extension if not present
-        if not custom_filename.lower().endswith('.mp4'):
-            custom_filename += ".mp4"
+            # NOTE: The current implementation will just use the default filename.
+            # A more robust solution would be to get the title from the video info.
+            custom_filename = f"RedDrop_Video.mp4" 
+        else:
+            # Add .mp4 extension if not present
+            if not custom_filename.lower().endswith('.mp4'):
+                custom_filename += ".mp4"
 
         output_path = os.path.join(DOWNLOAD_DIR, custom_filename)
 
         if not os.path.exists(COOKIE_FILE):
-             # It's better to return a JSON error that the frontend can handle
+            # It's better to return a JSON error that the frontend can handle
             return jsonify({"error": "Cookie file not found on server."}), 500
 
-        # --- FIX ---
-        # Changed the format selector to request a pre-merged file.
-        # 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        # This tries to get the best separate components first, but if that fails
-        # (e.g., due to missing ffmpeg), it falls back to the best pre-merged MP4.
+        # Create the yt-dlp command.
+        # This will download the video and audio streams separately and merge them.
         command = [
             "yt-dlp",
             "--cookies", COOKIE_FILE,
-            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "-S", f"res,ext:mp4:m4a", # Adjusted sorting for better matching
+            "-f", f"bestvideo[height<={resolution}]+bestaudio/best[height<={resolution}]" if resolution != "best" else "bestvideo+bestaudio",
+            "--merge-output-format", "mp4",
             "-o", output_path,
             video_url
         ]
+        
+        # A simple fallback for resolutions:
+        # 'best' will get the best video and audio available and merge them.
+        # Other resolutions will try to get a video stream up to that resolution.
 
         print("🚀 Running command:", " ".join(command))
 
-        # Using Popen for better control over stdout/stderr if needed in the future
+        # Using Popen for better control over stdout/stderr
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate()
 
