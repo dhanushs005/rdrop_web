@@ -1,10 +1,16 @@
-from flask import Flask, request, render_template, jsonify, send_file
+from flask import Flask, render_template, request, send_file
 import yt_dlp
 import os
-import tempfile
-import re
+import uuid
+import shutil
 
 app = Flask(__name__)
+
+DOWNLOAD_FOLDER = "downloads"
+COOKIE_FILE = "youtube_cookies.txt"
+
+# Ensure the download folder exists
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 @app.route('/')
 def index():
@@ -12,37 +18,50 @@ def index():
 
 @app.route('/download', methods=['POST'])
 def download_video():
-    data = request.json
-    url = data.get('url')
-    resolution = data.get('resolution', 'best')
-    filename_raw = data.get('filename', 'RedDrop_Video')
+    video_url = request.form['url']
+    filename = request.form.get('filename', '').strip()
 
-    if not url:
-        return jsonify({'error': 'Missing URL'}), 400
+    if not video_url:
+        return "❌ Error: No video URL provided."
 
-    # Sanitize filename
-    filename_safe = re.sub(r'[^\w\-_\. ]', '_', filename_raw)
+    if not filename:
+        filename = str(uuid.uuid4())  # Generate a unique name if not provided
 
-    format_str = (
-        f'bestvideo[height<={resolution}][ext=mp4]+bestaudio/best'
-        if resolution != 'best' else 'bestvideo[ext=mp4]+bestaudio/best'
-    )
+    temp_dir = os.path.join(DOWNLOAD_FOLDER, str(uuid.uuid4()))
+    os.makedirs(temp_dir, exist_ok=True)
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        output_path = os.path.join(tmp_dir, f"{filename_safe}.mp4")
-        ydl_opts = {
-            'format': format_str,
-            'outtmpl': output_path,
-            'merge_output_format': 'mp4',
-            'quiet': True
-        }
+    out_path = os.path.join(temp_dir, f"{filename}.%(ext)s")
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-                return send_file(output_path, as_attachment=True)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'outtmpl': out_path,
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'cookiefile': COOKIE_FILE,  # Use cookie file for authentication
+    }
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            final_filename = ydl.prepare_filename(info).replace("%(ext)s", "mp4")
+        
+        # Final file path
+        downloaded_file = os.path.join(temp_dir, f"{filename}.mp4")
+        
+        # Find the actual downloaded file (yt-dlp might keep the original extension)
+        for file in os.listdir(temp_dir):
+            if file.startswith(filename):
+                downloaded_file = os.path.join(temp_dir, file)
+                break
+
+        return send_file(downloaded_file, as_attachment=True)
+
+    except Exception as e:
+        return f"❌ Download failed: {str(e)}"
+
+    finally:
+        # Optional cleanup: Remove downloaded files after request
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+if __name__ == '__main__':
+    app.run(debug=True)
