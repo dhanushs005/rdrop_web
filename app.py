@@ -1,62 +1,66 @@
 from flask import Flask, render_template, request, send_file
-import yt_dlp
+import subprocess
 import os
 import uuid
-import shutil
 
 app = Flask(__name__)
+DOWNLOAD_DIR = "downloads"
+COOKIE_FILE = "youtube_cookies.txt"
 
-DOWNLOAD_FOLDER = "downloads"
-COOKIE_FILE = "youtube_cookies.txt"  # Make sure this file is included in your Render repo!
+# Ensure download directory exists
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Ensure the download folder exists
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/download', methods=['POST'])
+@app.route("/download", methods=["POST"])
 def download_video():
-    video_url = request.form.get('url', '').strip()
-    filename = request.form.get('filename', '').strip()
-
-    if not video_url:
-        return "❌ Error: No video URL provided."
-
-    # Generate a unique filename if not provided
-    if not filename:
-        filename = str(uuid.uuid4())
-
-    # Temporary folder for this download
-    temp_dir = os.path.join(DOWNLOAD_FOLDER, str(uuid.uuid4()))
-    os.makedirs(temp_dir, exist_ok=True)
-
-    output_template = os.path.join(temp_dir, f"{filename}.%(ext)s")
-
-    ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
-        'outtmpl': output_template,
-        'merge_output_format': 'mp4',
-        'quiet': True,
-        'cookiefile': COOKIE_FILE,  # Used for YouTube login bypass
-    }
-
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            downloaded_file = ydl.prepare_filename(info)
-            downloaded_file = downloaded_file.rsplit('.', 1)[0] + '.mp4'
+        video_url = request.form.get("url")
+        resolution = request.form.get("resolution", "1080p")
+        custom_filename = request.form.get("filename", "").strip()
 
-        return send_file(downloaded_file, as_attachment=True)
+        if not video_url:
+            return "❌ No video URL provided."
+
+        # Sanitize filename
+        if custom_filename == "":
+            custom_filename = f"video_{uuid.uuid4().hex[:8]}"
+
+        output_path = os.path.join(DOWNLOAD_DIR, f"{custom_filename}.mp4")
+
+        if not os.path.exists(COOKIE_FILE):
+            return "❌ Cookie file not found on server."
+
+        # Construct yt-dlp command
+        command = [
+            "yt-dlp",
+            "--cookies", COOKIE_FILE,
+            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+            "-S", f"res:{resolution}",
+            "-o", output_path,
+            video_url
+        ]
+
+        print("🚀 Running command:", " ".join(command))
+
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        if result.returncode != 0:
+            print("❌ yt-dlp error:", result.stderr)
+            return f"❌ Download failed:\n\n{result.stderr}"
+
+        if not os.path.exists(output_path):
+            return "❌ Download failed. File not found."
+
+        print(f"✅ Downloaded: {output_path}")
+        return send_file(output_path, as_attachment=True)
 
     except Exception as e:
-        return f"❌ Download failed: {str(e)}"
+        print("❌ Exception:", str(e))
+        return f"❌ Error: {str(e)}"
 
-    finally:
-        # Clean up temp folder after sending file
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Required for Render.com
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))   
     app.run(debug=True, host='0.0.0.0', port=port)
